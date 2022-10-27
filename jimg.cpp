@@ -10,7 +10,7 @@ namespace jimg
     image load_img_from_file(const char* name)
     {
         int w, h, n;
-
+        stbi_load()
         uint8_t* data = stbi_load(name, &w, &h, &n, 0);
 
         float* linear = new float[w * h * n];

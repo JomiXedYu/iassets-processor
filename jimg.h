@@ -95,6 +95,8 @@ namespace jimg
         void(*deleter)(T*);
         T* data;
 
+        buffer() : size_(0), deleter(nullptr), data(nullptr) {}
+
         buffer(int32_t size) : size_(size), deleter(nullptr)
         {
             data = new T[size];
@@ -106,10 +108,17 @@ namespace jimg
 
         buffer(const buffer& r)
         {
-            size_ = r.size_;
-            data = new T[size_];
-            deleter = nullptr;
-            ::memcpy(data, r.data, size_);
+            if (r.data)
+            {
+                size_ = r.size_;
+                data = new T[size_];
+                deleter = nullptr;
+                ::memcpy(data, r.data, size_);
+            }
+            else
+            {
+                data = nullptr;
+            }
         }
 
         buffer(buffer&& r) noexcept
@@ -129,6 +138,7 @@ namespace jimg
         int32_t size() const { return size_; }
         int32_t byte_size() const { return size_ * sizeof(T); }
         bool is_managed() const { return deleter != nullptr; }
+        bool empty() const { return this->data == nullptr; }
         operator T* () { return this->data; }
     };
 
@@ -140,7 +150,10 @@ namespace jimg
         int32_t weight;
         int32_t height;
         buffer<float> buf;
+
         std::map<std::string, std::any> attr;
+
+        image() : channel_num(0), weight(0), height(0) {}
 
         image(int32_t channel_num, int32_t weight, int32_t height, const attr_t& attr = {})
             :channel_num(channel_num), weight(weight), height(height),
@@ -158,6 +171,7 @@ namespace jimg
         image(image&& r) noexcept = default;
 
         image_io<float> operate() { return image_io<float>(buf.data, channel_num, weight, height); }
+        bool empty() const { return this->buf.empty(); }
 
         template<typename T>
         void set_attr(const std::string& name, const T& value)
@@ -180,6 +194,8 @@ namespace jimg
             *out = std::any_cast<T>(it->second);
             return true;
         }
+
+
     };
 
     image load_img_from_file(const char* name);
