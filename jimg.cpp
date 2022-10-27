@@ -32,7 +32,7 @@ namespace jimg
             buffer<uint8_t> buf = buffer<uint8_t>(img.size());
             linear_to_bit8(img.data, img.size(), buf);
             stbi_write_jpg(name, img.weight, img.height, img.channel_num, buf, 0);
-            
+
         }
         else if (ext == ".png")
         {

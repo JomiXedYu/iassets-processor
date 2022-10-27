@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <type_traits>
 #include <string>
+#include <map>
+#include <any>
 
 namespace jimg
 {
@@ -28,6 +30,7 @@ namespace jimg
         {}
 
         T* at(int x, int y) { return data + (y * weight * channel_num + x * channel_num); }
+        color at_rgba(int x, int y) { return color{ at(x, y) }; }
         size_t size() const { return channel_num * weight * height; }
 
         //lambda : [](int x, int y, color_io_rgba<T>::color&& c)
@@ -39,18 +42,26 @@ namespace jimg
                     func(x, y, color(at(x, y)));
         }
 
-        void draw(image_io<T> img, int posx, int posy)
+        void draw(image_io<T> painter,
+            int me_posx = 0, int me_posy = 0,
+            int painter_offx = 0, int painter_offy = 0,
+            int painter_width = -1, int painter_height = -1)
         {
-            if (posx > weight || posy > height) return;
-            int xlen = weight - img.weight - posx > 0 ? weight - img.weight - posx : weight;
-            int ylen = height - img.height - posy > 0 ? height - img.height - posy : height;
+            if (me_posx > weight || me_posy > height) return;
 
-            for (size_t y = 0; y < img.height; y++)
+            painter_width = painter_width != -1 ? painter_width : painter.height;
+            painter_height = painter_height != -1 ? painter_height : painter.height;
+
+            int size_width = painter.weight - painter_offx;
+            int size_height = painter.height - painter_offy;
             {
-                for (size_t x = 0; x < img.weight; x++)
+                for (size_t y = 0; y < size_height; y++)
                 {
-                    if (posx + x > weight || posy + y > height) continue;
-                    ::memcpy(at(posx + x, posy + y), img.at(x, y), sizeof(T) * channel_num);
+                    for (size_t x = 0; x < size_width; x++)
+                    {
+                        if (me_posx + x >= weight || me_posy + y >= height) continue;
+                        ::memcpy(at(me_posx + x, me_posy + y), painter.at(x + painter_offx, y + painter_offy), sizeof(T) * channel_num);
+                    }
                 }
             }
 
@@ -97,6 +108,7 @@ namespace jimg
         {
             size_ = r.size_;
             data = new T[size_];
+            deleter = nullptr;
             ::memcpy(data, r.data, size_);
         }
 
@@ -122,29 +134,52 @@ namespace jimg
 
     struct image
     {
+        using attr_t = std::map<std::string, std::any>;
+
         int32_t channel_num;
         int32_t weight;
         int32_t height;
         buffer<float> buf;
+        std::map<std::string, std::any> attr;
 
-        image(int32_t channel_num, int32_t weight, int32_t height)
+        image(int32_t channel_num, int32_t weight, int32_t height, const attr_t& attr = {})
             :channel_num(channel_num), weight(weight), height(height),
-            buf(channel_num* weight* height)
+            buf(channel_num* weight* height), attr(attr)
         {}
 
-        image(float* managed_data, int32_t channel_num, int32_t weight, int32_t height, void(*free)(float*))
+        image(float* managed_data, int32_t channel_num, int32_t weight, int32_t height, void(*deleter)(float*), const attr_t& attr = {})
             : channel_num(channel_num), weight(weight), height(height),
-            buf(managed_data, channel_num* weight* height, free)
+            buf(managed_data, channel_num* weight* height, deleter), attr(attr)
         {
         }
 
-        image(const image& img) = delete;
-        image(image&& r) noexcept :
-            channel_num(r.channel_num), weight(r.weight), height(r.height), buf(std::move(r.buf))
-        {
-        }
+        image(const image& img) = default;
+
+        image(image&& r) noexcept = default;
 
         image_io<float> operate() { return image_io<float>(buf.data, channel_num, weight, height); }
+
+        template<typename T>
+        void set_attr(const std::string& name, const T& value)
+        {
+            attr[name] = value;
+        }
+
+        template<typename T>
+        bool get_attr(const std::string& name, T* out)
+        {
+            auto it = attr.find(name);
+            if (it == attr.end())
+            {
+                return false;
+            }
+            if (it->second.type() != typeid(T))
+            {
+                return false;
+            }
+            *out = std::any_cast<T>(it->second);
+            return true;
+        }
     };
 
     image load_img_from_file(const char* name);
